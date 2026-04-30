@@ -732,22 +732,20 @@ def generar_pdf():
     buffer.seek(0)
     return buffer.getvalue()
 
-# MODIFICAR la sección de DESCARGA (al final de la Sección 5):
-st.markdown("### 📥 Descargar Reportes")
+# ─────────────────────────────────────────────
+# DESCARGA SOLO PDF - SIMPLE
+# ─────────────────────────────────────────────
+st.markdown("---")
+st.markdown("### 📄 Descargar Reporte Profesional")
 
-col1 = st.columns(2)
-
-
-with col1:
-    # NUEVO BOTÓN PDF
-    nombre_pdf = f"Simulacion_APV_{st.session_state['nombre'].replace(' ','_') or 'Cliente'}_2026.pdf"
-    st.download_button(
-        label="📄 PDF Profesional",
-        data=generar_pdf(),
-        file_name=nombre_pdf,
-        mime="application/pdf",
-        use_container_width=True,
-    )
+nombre_pdf = f"Simulacion_APV_{st.session_state['nombre'].replace(' ','_') or 'Cliente'}_2026.pdf"
+st.download_button(
+    label="📄 PDF Completo para Cliente",
+    data=generar_pdf(),
+    file_name=nombre_pdf,
+    mime="application/pdf",
+    use_container_width=True
+)
     
     # ─────────────────────────────────────────────
     # FUNCIÓN PDF PROFESIONAL
