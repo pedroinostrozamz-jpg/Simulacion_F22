@@ -879,21 +879,3 @@ st.download_button(
         doc.build(story)
         buffer.seek(0)
         return buffer.getvalue()
-
-
-    # BOTONES DESCARGA
-    st.markdown("---")
-    st.markdown("### 📥 Descargar Reportes")
-    
-    col1 = st.columns(2)
-    
-    
-    with col1:
-        nombre_pdf = f"Simulacion_APV_{st.session_state['nombre'].replace(' ','_') or 'Cliente'}_2026.pdf"
-        st.download_button(
-            label="📄 PDF Profesional",
-            data=generar_pdf(),
-            file_name=nombre_pdf,
-            mime="application/pdf",
-            use_container_width=True,
-        )
