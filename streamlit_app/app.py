@@ -735,20 +735,10 @@ def generar_pdf():
 # MODIFICAR la sección de DESCARGA (al final de la Sección 5):
 st.markdown("### 📥 Descargar Reportes")
 
-col1, col2 = st.columns(2)
+col1 = st.columns(2)
+
 
 with col1:
-    # Botón Excel (mantenlo igual)
-    nombre_excel = f"Simulador_APV_{st.session_state['nombre'].replace(' ','_') or 'Cliente'}_2026.xlsx"
-    st.download_button(
-        label="📊 Excel Completo",
-        data=generar_excel(),
-        file_name=nombre_excel,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-    )
-
-with col2:
     # NUEVO BOTÓN PDF
     nombre_pdf = f"Simulacion_APV_{st.session_state['nombre'].replace(' ','_') or 'Cliente'}_2026.pdf"
     st.download_button(
@@ -758,13 +748,7 @@ with col2:
         mime="application/pdf",
         use_container_width=True,
     )
-
-        # ── DESCARGA EXCEL ──
-    st.markdown("---")
-    st.markdown("### Descargar simulación en Excel")
-
-   
-
+    
     # ─────────────────────────────────────────────
     # FUNCIÓN PDF PROFESIONAL
     # ─────────────────────────────────────────────
