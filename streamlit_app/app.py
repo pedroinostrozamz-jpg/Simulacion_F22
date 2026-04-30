@@ -11,6 +11,205 @@ from datetime import datetime
 import math
 from io import BytesIO
 
+def generar_pdf():
+    """Genera PDF profesional con toda la simulación"""
+    buffer = io.BytesIO()
+    
+    # Configuración PDF
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=1.5*cm, leftMargin=1.5*cm,
+        topMargin=1.5*cm, bottomMargin=1.5*cm
+    )
+    
+    # Estilos
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        spaceAfter=30,
+        textColor=colors.HexColor("#1a3a5c"),
+        alignment=TA_CENTER
+    )
+    subtitle_style = ParagraphStyle(
+        'CustomSubtitle',
+        parent=styles['Heading2'],
+        fontSize=12,
+        spaceAfter=20,
+        textColor=colors.HexColor("#2a5a8c"),
+        alignment=TA_CENTER
+    )
+    normal_style = ParagraphStyle(
+        'CustomNormal',
+        parent=styles['Normal'],
+        fontSize=9,
+        spaceAfter=8,
+        leftIndent=0
+    )
+    bold_style = ParagraphStyle(
+        'CustomBold',
+        parent=styles['Normal'],
+        fontSize=9,
+        spaceAfter=8,
+        fontName='Helvetica-Bold'
+    )
+    
+    story = []
+    
+    # HEADER - Título
+    story.append(Paragraph("SIMULADOR APV 2026", title_style))
+    story.append(Paragraph("Ahorro Previsional Voluntario - Régimen A", subtitle_style))
+    story.append(Spacer(1, 0.5*cm))
+    
+    # DATOS CLIENTE
+    story.append(Paragraph("1. DATOS DEL CLIENTE", styles['Heading2']))
+    cliente_data = [
+        ['Nombre:', st.session_state["nombre"]],
+        ['RUT:', st.session_state["rut"]],
+        ['Email:', st.session_state["email"]],
+        ['Teléfono:', st.session_state["telefono"]],
+        ['Asesor:', st.session_state["asesor"]],
+        ['Fecha simulación:', st.session_state["fecha"] or datetime.now().strftime("%d/%m/%Y")]
+    ]
+    tabla_cliente = Table(cliente_data, colWidths=[3*cm, 12*cm])
+    tabla_cliente.setStyle(TableStyle([
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+        ('FONTSIZE', (0,0), (-1,-1), 9),
+        ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#f0f4f8")),
+    ]))
+    story.append(tabla_cliente)
+    story.append(Spacer(1, 0.5*cm))
+    
+    # FORMULARIO 22
+    story.append(Paragraph("2. FORMULARIO 22 COMPACTO", styles['Heading2']))
+    base = st.session_state["cod170"]
+    res_f22 = st.session_state["cod305"]
+    
+    f22_data = [
+        ['CÓDIGO', 'DESCRIPCIÓN', 'MONTO ($)'],
+        ['170', 'Base Imponible Anual IGC', fmt_clp(base)],
+        ['1098', 'Sueldos/pensiones', fmt_clp(st.session_state["cod1098"])],
+        ['110', 'Honorarios', fmt_clp(st.session_state["cod110"])],
+        ['155', 'Rentas capitales mobiliarios', fmt_clp(st.session_state["cod155"])],
+        ['157', 'IGC según tabla', fmt_clp(st.session_state["cod157"])],
+        ['305', 'Resultado liquidación', fmt_clp(res_f22)],
+        ['87', 'Saldo a favor', fmt_clp(st.session_state["cod87"])]
+    ]
+    tabla_f22 = Table(f22_data, colWidths=[2*cm, 8*cm, 5*cm])
+    tabla_f22.setStyle(TableStyle([
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+        ('FONTSIZE', (0,0), (-1,-1), 8),
+        ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+        ('ALIGN', (0,0), (0,-1), 'CENTER'),
+        ('ALIGN', (1,0), (1,-1), 'LEFT'),
+        ('ALIGN', (2,0), (2,-1), 'RIGHT'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#e8f0fa")),
+    ]))
+    story.append(tabla_f22)
+    
+    # Estado F22
+    estado = "DEVOLUCIÓN" if res_f22 < 0 else "PAGO"
+    color_estado = colors.green if res_f22 < 0 else colors.red
+    story.append(Paragraph(f"<b>Estado F22 actual: {estado} ${abs(res_f22):,}</b>".replace(",", "."), bold_style))
+    story.append(Spacer(1, 0.5*cm))
+    
+    # SIMULACIÓN APV
+    apv = st.session_state["apv_anual"]
+    if apv > 0 and base > 0:
+        igc_sin = calc_igc(base)
+        igc_con = calc_igc(max(0.0, base - apv))
+        ahorro = igc_sin - igc_con
+        res_con = res_f22 - ahorro
+        
+        story.append(Paragraph("3. SIMULACIÓN APV", styles['Heading2']))
+        
+        # Comparación KPIs
+        kpis_data = [
+            ['CONCEPTO', 'SIN APV', 'CON APV', 'IMPACTO'],
+            ['Base Imponible', fmt_clp(base), fmt_clp(max(0.0, base-apv)), f"-{fmt_clp(apv)}"],
+            ['IGC Calculado', fmt_clp(igc_sin), fmt_clp(igc_con), f"-{fmt_clp(ahorro)}"],
+            ['Resultado F22', fmt_clp(res_f22), fmt_clp(res_con), f"+{fmt_clp(ahorro)}"],
+            ['APV Anual', '—', fmt_clp(apv), fmt_pct(ahorro/apv) if apv > 0 else '—']
+        ]
+        tabla_kpis = Table(kpis_data, colWidths=[4*cm, 3*cm, 3*cm, 3*cm])
+        tabla_kpis.setStyle(TableStyle([
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+            ('FONTSIZE', (0,0), (-1,-1), 8),
+            ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+            ('ALIGN', (0,0), (0,-1), 'LEFT'),
+            ('ALIGN', (1,0), (-1,-1), 'RIGHT'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#f0f4f8")),
+            ('TEXTCOLOR', (3,1), (3,-1), colors.green),
+        ]))
+        story.append(tabla_kpis)
+        story.append(Spacer(1, 0.3*cm))
+        
+        # Tramo actual
+        tramo = get_tramo(base)
+        story.append(Paragraph(f"<i>Tramo IGC actual: {tramo['label']} | Tasa efectiva: {fmt_pct(igc_sin/base) if base > 0 else '0%'}</i>", normal_style))
+    
+    # PROYECCIÓN 10 AÑOS
+    story.append(Paragraph("4. PROYECCIÓN RENTABILIDAD 10 AÑOS", styles['Heading2']))
+    story.append(Paragraph(f"<i>Tasa: {st.session_state['tasa_pct']}% anual | UF base: ${fmt_clp(st.session_state['uf_base'])} | APV anual: {fmt_clp(apv)}</i>", normal_style))
+    
+    if apv > 0:
+        tasa = st.session_state["tasa_pct"] / 100
+        uf_base = st.session_state["uf_base"]
+        acum_clp = 0.0
+        aporte_acum = 0.0
+        
+        # Solo mostrar años 1,5,10 para que quepa
+        años_mostrar = [1, 5, 10]
+        proj_data = [['AÑO', 'FONDO (CLP)', 'FONDO (UF)', 'ROI ACUMULADO']]
+        
+        for year in [1,5,10]:
+            uf_ano = uf_base * math.pow(1.03, year)
+            for _ in range(12*year):
+                acum_clp = (acum_clp + apv/12) * (1 + math.pow(1 + tasa, 1/12) - 1)
+            aporte_acum = apv * year
+            roi = (acum_clp - aporte_acum) / aporte_acum if aporte_acum > 0 else 0
+            
+            proj_data.append([
+                str(year),
+                fmt_clp(round(acum_clp)).replace(".", ","),
+                f"{acum_clp/uf_ano:,.1f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                f"{roi*100:.1f}%"
+            ])
+        
+        tabla_proj = Table(proj_data, colWidths=[2*cm, 5*cm, 4*cm, 3*cm])
+        tabla_proj.setStyle(TableStyle([
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+            ('FONTSIZE', (0,0), (-1,-1), 8),
+            ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+            ('ALIGN', (0,0), (0,-1), 'CENTER'),
+            ('ALIGN', (1,0), (3,-1), 'RIGHT'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#e8f0fa")),
+        ]))
+        story.append(tabla_proj)
+    
+    # FOOTER
+    story.append(Spacer(1, 1*cm))
+    story.append(Paragraph("Generado con Simulador APV 2026 | Tablas SII vigentes", 
+                          ParagraphStyle('Footer', parent=styles['Normal'], 
+                                       fontSize=8, alignment=TA_CENTER, textColor=colors.grey)))
+    
+    # Construir PDF
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
 # ─────────────────────────────────────────────
 # CONFIGURACIÓN DE PÁGINA
 # ─────────────────────────────────────────────
@@ -533,204 +732,7 @@ ROI = Rentabilidad generada / Total aportado
 ```
 """)
 
-def generar_pdf():
-    """Genera PDF profesional con toda la simulación"""
-    buffer = io.BytesIO()
-    
-    # Configuración PDF
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=1.5*cm, leftMargin=1.5*cm,
-        topMargin=1.5*cm, bottomMargin=1.5*cm
-    )
-    
-    # Estilos
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=18,
-        spaceAfter=30,
-        textColor=colors.HexColor("#1a3a5c"),
-        alignment=TA_CENTER
-    )
-    subtitle_style = ParagraphStyle(
-        'CustomSubtitle',
-        parent=styles['Heading2'],
-        fontSize=12,
-        spaceAfter=20,
-        textColor=colors.HexColor("#2a5a8c"),
-        alignment=TA_CENTER
-    )
-    normal_style = ParagraphStyle(
-        'CustomNormal',
-        parent=styles['Normal'],
-        fontSize=9,
-        spaceAfter=8,
-        leftIndent=0
-    )
-    bold_style = ParagraphStyle(
-        'CustomBold',
-        parent=styles['Normal'],
-        fontSize=9,
-        spaceAfter=8,
-        fontName='Helvetica-Bold'
-    )
-    
-    story = []
-    
-    # HEADER - Título
-    story.append(Paragraph("SIMULADOR APV 2026", title_style))
-    story.append(Paragraph("Ahorro Previsional Voluntario - Régimen A", subtitle_style))
-    story.append(Spacer(1, 0.5*cm))
-    
-    # DATOS CLIENTE
-    story.append(Paragraph("1. DATOS DEL CLIENTE", styles['Heading2']))
-    cliente_data = [
-        ['Nombre:', st.session_state["nombre"]],
-        ['RUT:', st.session_state["rut"]],
-        ['Email:', st.session_state["email"]],
-        ['Teléfono:', st.session_state["telefono"]],
-        ['Asesor:', st.session_state["asesor"]],
-        ['Fecha simulación:', st.session_state["fecha"] or datetime.now().strftime("%d/%m/%Y")]
-    ]
-    tabla_cliente = Table(cliente_data, colWidths=[3*cm, 12*cm])
-    tabla_cliente.setStyle(TableStyle([
-        ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
-        ('FONTSIZE', (0,0), (-1,-1), 9),
-        ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
-        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.black),
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#f0f4f8")),
-    ]))
-    story.append(tabla_cliente)
-    story.append(Spacer(1, 0.5*cm))
-    
-    # FORMULARIO 22
-    story.append(Paragraph("2. FORMULARIO 22 COMPACTO", styles['Heading2']))
-    base = st.session_state["cod170"]
-    res_f22 = st.session_state["cod305"]
-    
-    f22_data = [
-        ['CÓDIGO', 'DESCRIPCIÓN', 'MONTO ($)'],
-        ['170', 'Base Imponible Anual IGC', fmt_clp(base)],
-        ['1098', 'Sueldos/pensiones', fmt_clp(st.session_state["cod1098"])],
-        ['110', 'Honorarios', fmt_clp(st.session_state["cod110"])],
-        ['155', 'Rentas capitales mobiliarios', fmt_clp(st.session_state["cod155"])],
-        ['157', 'IGC según tabla', fmt_clp(st.session_state["cod157"])],
-        ['305', 'Resultado liquidación', fmt_clp(res_f22)],
-        ['87', 'Saldo a favor', fmt_clp(st.session_state["cod87"])]
-    ]
-    tabla_f22 = Table(f22_data, colWidths=[2*cm, 8*cm, 5*cm])
-    tabla_f22.setStyle(TableStyle([
-        ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
-        ('FONTSIZE', (0,0), (-1,-1), 8),
-        ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
-        ('ALIGN', (0,0), (0,-1), 'CENTER'),
-        ('ALIGN', (1,0), (1,-1), 'LEFT'),
-        ('ALIGN', (2,0), (2,-1), 'RIGHT'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.black),
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#e8f0fa")),
-    ]))
-    story.append(tabla_f22)
-    
-    # Estado F22
-    estado = "DEVOLUCIÓN" if res_f22 < 0 else "PAGO"
-    color_estado = colors.green if res_f22 < 0 else colors.red
-    story.append(Paragraph(f"<b>Estado F22 actual: {estado} ${abs(res_f22):,}</b>".replace(",", "."), bold_style))
-    story.append(Spacer(1, 0.5*cm))
-    
-    # SIMULACIÓN APV
-    apv = st.session_state["apv_anual"]
-    if apv > 0 and base > 0:
-        igc_sin = calc_igc(base)
-        igc_con = calc_igc(max(0.0, base - apv))
-        ahorro = igc_sin - igc_con
-        res_con = res_f22 - ahorro
-        
-        story.append(Paragraph("3. SIMULACIÓN APV", styles['Heading2']))
-        
-        # Comparación KPIs
-        kpis_data = [
-            ['CONCEPTO', 'SIN APV', 'CON APV', 'IMPACTO'],
-            ['Base Imponible', fmt_clp(base), fmt_clp(max(0.0, base-apv)), f"-{fmt_clp(apv)}"],
-            ['IGC Calculado', fmt_clp(igc_sin), fmt_clp(igc_con), f"-{fmt_clp(ahorro)}"],
-            ['Resultado F22', fmt_clp(res_f22), fmt_clp(res_con), f"+{fmt_clp(ahorro)}"],
-            ['APV Anual', '—', fmt_clp(apv), fmt_pct(ahorro/apv) if apv > 0 else '—']
-        ]
-        tabla_kpis = Table(kpis_data, colWidths=[4*cm, 3*cm, 3*cm, 3*cm])
-        tabla_kpis.setStyle(TableStyle([
-            ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
-            ('FONTSIZE', (0,0), (-1,-1), 8),
-            ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
-            ('ALIGN', (0,0), (0,-1), 'LEFT'),
-            ('ALIGN', (1,0), (-1,-1), 'RIGHT'),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#f0f4f8")),
-            ('TEXTCOLOR', (3,1), (3,-1), colors.green),
-        ]))
-        story.append(tabla_kpis)
-        story.append(Spacer(1, 0.3*cm))
-        
-        # Tramo actual
-        tramo = get_tramo(base)
-        story.append(Paragraph(f"<i>Tramo IGC actual: {tramo['label']} | Tasa efectiva: {fmt_pct(igc_sin/base) if base > 0 else '0%'}</i>", normal_style))
-    
-    # PROYECCIÓN 10 AÑOS
-    story.append(Paragraph("4. PROYECCIÓN RENTABILIDAD 10 AÑOS", styles['Heading2']))
-    story.append(Paragraph(f"<i>Tasa: {st.session_state['tasa_pct']}% anual | UF base: ${fmt_clp(st.session_state['uf_base'])} | APV anual: {fmt_clp(apv)}</i>", normal_style))
-    
-    if apv > 0:
-        tasa = st.session_state["tasa_pct"] / 100
-        uf_base = st.session_state["uf_base"]
-        acum_clp = 0.0
-        aporte_acum = 0.0
-        
-        # Solo mostrar años 1,5,10 para que quepa
-        años_mostrar = [1, 5, 10]
-        proj_data = [['AÑO', 'FONDO (CLP)', 'FONDO (UF)', 'ROI ACUMULADO']]
-        
-        for year in [1,5,10]:
-            uf_ano = uf_base * math.pow(1.03, year)
-            for _ in range(12*year):
-                acum_clp = (acum_clp + apv/12) * (1 + math.pow(1 + tasa, 1/12) - 1)
-            aporte_acum = apv * year
-            roi = (acum_clp - aporte_acum) / aporte_acum if aporte_acum > 0 else 0
-            
-            proj_data.append([
-                str(year),
-                fmt_clp(round(acum_clp)).replace(".", ","),
-                f"{acum_clp/uf_ano:,.1f}".replace(",", "X").replace(".", ",").replace("X", "."),
-                f"{roi*100:.1f}%"
-            ])
-        
-        tabla_proj = Table(proj_data, colWidths=[2*cm, 5*cm, 4*cm, 3*cm])
-        tabla_proj.setStyle(TableStyle([
-            ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
-            ('FONTSIZE', (0,0), (-1,-1), 8),
-            ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
-            ('ALIGN', (0,0), (0,-1), 'CENTER'),
-            ('ALIGN', (1,0), (3,-1), 'RIGHT'),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#e8f0fa")),
-        ]))
-        story.append(tabla_proj)
-    
-    # FOOTER
-    story.append(Spacer(1, 1*cm))
-    story.append(Paragraph("Generado con Simulador APV 2026 | Tablas SII vigentes", 
-                          ParagraphStyle('Footer', parent=styles['Normal'], 
-                                       fontSize=8, alignment=TA_CENTER, textColor=colors.grey)))
-    
-    # Construir PDF
-    doc.build(story)
-    buffer.seek(0)
-    return buffer.getvalue()
+
 
 # ─────────────────────────────────────────────
 # DESCARGA SOLO PDF - SIMPLE
