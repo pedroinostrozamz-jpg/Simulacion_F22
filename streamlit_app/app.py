@@ -760,10 +760,10 @@ with col2:
     )
 
         # ── DESCARGA EXCEL ──
-        st.markdown("---")
-        st.markdown("### Descargar simulación en Excel")
+    st.markdown("---")
+    st.markdown("### Descargar simulación en Excel")
 
-        def generar_excel():
+    def generar_excel():
             output = BytesIO()
             with pd.ExcelWriter(output, engine="openpyxl") as writer:
                 # Hoja 1: Datos Cliente
