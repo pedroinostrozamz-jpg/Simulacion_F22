@@ -826,26 +826,176 @@ with col2:
                 ])
                 df_apv.to_excel(writer, sheet_name="4. Simulacion APV", index=False)
 
-                # Hoja 5: Proyección
+                                # Hoja 5: Proyección
                 df_raw = pd.DataFrame([{
-                    "Año":                   r["Año"],
-                    "UF del año":            float(r["UF del año"].replace(".", "").replace("$", "").replace(",", ".")),
-                    "Fondo Acumulado CLP":   r["Fondo Acumulado (CLP)"],
-                    "Fondo Acumulado UF":    r["Fondo Acumulado (UF)"],
-                    "Rentabilidad CLP":      r["Rentabilidad (CLP)"],
-                    "Rentabilidad UF":       r["Rentabilidad (UF)"],
-                    "ROI acumulado":         r["ROI acumulado"],
+                    "Año": r["Año"],
+                    "UF del año": uf_base * math.pow(1.03, r["Año"]),
+                    "Fondo Acumulado CLP": float(r["Fondo Acumulado (CLP)"].replace(".", "").replace("$", "").replace(",", ".")),
+                    "Fondo Acumulado UF": float(r["Fondo Acumulado (UF)"].replace("UF ", "").replace(",", ".")),
+                    "Rentabilidad CLP": float(r["Rentabilidad (CLP)"].replace(".", "").replace("$", "").replace(",", ".")),
+                    "Rentabilidad UF": float(r["Rentabilidad (UF)"].replace("UF ", "").replace(",", ".")),
+                    "ROI acumulado": float(r["ROI acumulado"].replace("%", "")) / 100,
                 } for r in rows_proj])
                 df_raw.to_excel(writer, sheet_name="5. Proyeccion Rentabilidad", index=False)
 
             output.seek(0)
             return output.read()
 
-        nombre_archivo = f"Simulador_APV_{st.session_state['nombre'].replace(' ','_') or 'Cliente'}_2026.xlsx"
+    # ─────────────────────────────────────────────
+    # FUNCIÓN PDF PROFESIONAL
+    # ─────────────────────────────────────────────
+    def generar_pdf():
+        """Genera PDF profesional con toda la simulación"""
+        buffer = io.BytesIO()
+        
+        # Configuración PDF
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            rightMargin=1.5*cm, leftMargin=1.5*cm,
+            topMargin=1.5*cm, bottomMargin=1.5*cm
+        )
+        
+        # Estilos
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            spaceAfter=30,
+            textColor=colors.HexColor("#1a3a5c"),
+            alignment=TA_CENTER
+        )
+        subtitle_style = ParagraphStyle(
+            'CustomSubtitle',
+            parent=styles['Heading2'],
+            fontSize=12,
+            spaceAfter=20,
+            textColor=colors.HexColor("#2a5a8c"),
+            alignment=TA_CENTER
+        )
+        normal_style = ParagraphStyle(
+            'CustomNormal',
+            parent=styles['Normal'],
+            fontSize=9,
+            spaceAfter=8
+        )
+        bold_style = ParagraphStyle(
+            'CustomBold',
+            parent=styles['Normal'],
+            fontSize=9,
+            spaceAfter=8,
+            fontName='Helvetica-Bold'
+        )
+        
+        story = []
+        
+        # HEADER
+        story.append(Paragraph("SIMULADOR APV 2026", title_style))
+        story.append(Paragraph("Ahorro Previsional Voluntario - Régimen A", subtitle_style))
+        story.append(Spacer(1, 0.5*cm))
+        
+        # DATOS CLIENTE
+        story.append(Paragraph("1. DATOS DEL CLIENTE", styles['Heading2']))
+        cliente_data = [
+            ['Nombre:', st.session_state["nombre"]],
+            ['RUT:', st.session_state["rut"]],
+            ['Email:', st.session_state["email"]],
+            ['Teléfono:', st.session_state["telefono"]],
+            ['Asesor:', st.session_state["asesor"]],
+            ['Fecha:', st.session_state["fecha"] or datetime.now().strftime("%d/%m/%Y")]
+        ]
+        tabla_cliente = Table(cliente_data, colWidths=[3*cm, 12*cm])
+        tabla_cliente.setStyle(TableStyle([
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+            ('FONTSIZE', (0,0), (-1,-1), 9),
+            ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#f0f4f8")),
+        ]))
+        story.append(tabla_cliente)
+        story.append(Spacer(1, 0.5*cm))
+        
+        # FORMULARIO 22
+        story.append(Paragraph("2. FORMULARIO 22", styles['Heading2']))
+        base = st.session_state["cod170"]
+        res_f22 = st.session_state["cod305"]
+        
+        f22_data = [
+            ['CÓD.', 'DESCRIPCIÓN', 'VALOR ($)'],
+            ['170', 'Base IGC', fmt_clp(base)],
+            ['1098', 'Sueldos', fmt_clp(st.session_state["cod1098"])],
+            ['110', 'Honorarios', fmt_clp(st.session_state["cod110"])],
+            ['305', 'Resultado', fmt_clp(res_f22)],
+            ['87', 'Devolución', fmt_clp(st.session_state["cod87"])]
+        ]
+        tabla_f22 = Table(f22_data, colWidths=[2*cm, 8*cm, 5*cm])
+        tabla_f22.setStyle(TableStyle([
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+            ('FONTSIZE', (0,0), (-1,-1), 8),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('ALIGN', (2,0), (2,-1), 'RIGHT'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#e8f0fa")),
+        ]))
+        story.append(tabla_f22)
+        story.append(Spacer(1, 0.3*cm))
+        
+        # APV
+        apv = st.session_state["apv_anual"]
+        if apv > 0 and base > 0:
+            igc_sin = calc_igc(base)
+            igc_con = calc_igc(max(0, base - apv))
+            ahorro = igc_sin - igc_con
+            
+            story.append(Paragraph("3. SIMULACIÓN APV", styles['Heading2']))
+            kpis_data = [
+                [' ', 'SIN APV', 'CON APV', 'AHORRO'],
+                ['Base', fmt_clp(base), fmt_clp(base-apv), fmt_clp(apv)],
+                ['IGC', fmt_clp(igc_sin), fmt_clp(igc_con), fmt_clp(ahorro)],
+                ['Rent. Impl.', '—', fmt_pct(ahorro/apv)]
+            ]
+            tabla_kpis = Table(kpis_data, colWidths=[3*cm, 3*cm, 3*cm, 3.5*cm])
+            tabla_kpis.setStyle(TableStyle([
+                ('FONTSIZE', (0,0), (-1,-1), 8),
+                ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
+                ('ALIGN', (0,1), (0,-1), 'LEFT'),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#f0f4f8")),
+            ]))
+            story.append(tabla_kpis)
+        
+        # PROYECCIÓN
+        story.append(Paragraph("4. PROYECCIÓN 10 AÑOS", styles['Heading2']))
+        story.append(Paragraph(f"<i>Tasa: {st.session_state['tasa_pct']}% | UF: ${st.session_state['uf_base']:,.0f}</i>", normal_style))
+        
+        doc.build(story)
+        buffer.seek(0)
+        return buffer.getvalue()
+
+    # BOTONES DESCARGA
+    st.markdown("---")
+    st.markdown("### 📥 Descargar Reportes")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        nombre_excel = f"Simulador_APV_{st.session_state['nombre'].replace(' ','_') or 'Cliente'}_2026.xlsx"
         st.download_button(
-            label="Descargar Excel (.xlsx)",
+            label="📊 Excel Completo",
             data=generar_excel(),
-            file_name=nombre_archivo,
+            file_name=nombre_excel,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+    
+    with col2:
+        nombre_pdf = f"Simulacion_APV_{st.session_state['nombre'].replace(' ','_') or 'Cliente'}_2026.pdf"
+        st.download_button(
+            label="📄 PDF Profesional",
+            data=generar_pdf(),
+            file_name=nombre_pdf,
+            mime="application/pdf",
             use_container_width=True,
         )
