@@ -763,83 +763,71 @@ with col2:
     st.markdown("---")
     st.markdown("### Descargar simulación en Excel")
 
-    def generar_excel():
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                # Hoja 1: Datos Cliente
-                df_cli = pd.DataFrame([{
-                    "Campo": k, "Valor": v
-                } for k, v in {
-                    "Nombre":          st.session_state["nombre"],
-                    "RUT":             st.session_state["rut"],
-                    "Email":           st.session_state["email"],
-                    "Teléfono":        st.session_state["telefono"],
-                    "Asesor":          st.session_state["asesor"],
-                    "Fecha":           st.session_state["fecha"],
-                }.items()])
-                df_cli.to_excel(writer, sheet_name="1. Datos Cliente", index=False)
+   def generar_excel():
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        # Hoja 1: Datos Cliente
+        df_cli = pd.DataFrame([{
+            "Campo": k, "Valor": v
+        } for k, v in {
+            "Nombre": st.session_state["nombre"],
+            "RUT": st.session_state["rut"],
+            "Email": st.session_state["email"],
+            "Teléfono": st.session_state["telefono"],
+            "Asesor": st.session_state["asesor"],
+            "Fecha": st.session_state["fecha"],
+        }.items()])
+        df_cli.to_excel(writer, sheet_name="1. Datos Cliente", index=False)
 
-                # Hoja 2: Formulario 22
-                df_f22 = pd.DataFrame([
-                    {"Código": "170",  "Descripción": "BASE IMPONIBLE ANUAL IGC",                    "Valor": st.session_state["cod170"]},
-                    {"Código": "1098", "Descripción": "Sueldos, pensiones y rentas similares",       "Valor": st.session_state["cod1098"]},
-                    {"Código": "110",  "Descripción": "Honorarios (Art. 42 N°2)",                    "Valor": st.session_state["cod110"]},
-                    {"Código": "155",  "Descripción": "Rentas capitales mobiliarios",                "Valor": st.session_state["cod155"]},
-                    {"Código": "157",  "Descripción": "IGC según tabla",                             "Valor": st.session_state["cod157"]},
-                    {"Código": "162",  "Descripción": "Crédito IGC por IUSC",                       "Valor": st.session_state["cod162"]},
-                    {"Código": "304",  "Descripción": "IGC / Débito fiscal determinado",            "Valor": st.session_state["cod304"]},
-                    {"Código": "198",  "Descripción": "Retenciones honorarios",                     "Valor": st.session_state["cod198"]},
-                    {"Código": "619",  "Descripción": "Impuesto retenido total rentas",             "Valor": st.session_state["cod619"]},
-                    {"Código": "305",  "Descripción": "Resultado liquidación (neg. = devolución)",  "Valor": st.session_state["cod305"]},
-                    {"Código": "87",   "Descripción": "Monto devolución solicitada",                "Valor": st.session_state["cod87"]},
-                ])
-                df_f22.to_excel(writer, sheet_name="2. Formulario 22", index=False)
+        # Hoja 2: Formulario 22
+        df_f22 = pd.DataFrame([
+            {"Código": "170", "Descripción": "BASE IMPONIBLE IGC", "Valor": st.session_state["cod170"]},
+            {"Código": "1098", "Descripción": "Sueldos/pensiones", "Valor": st.session_state["cod1098"]},
+            {"Código": "110", "Descripción": "Honorarios", "Valor": st.session_state["cod110"]},
+            {"Código": "305", "Descripción": "Resultado liquidación", "Valor": st.session_state["cod305"]},
+            {"Código": "87", "Descripción": "Saldo a favor", "Valor": st.session_state["cod87"]},
+        ])
+        df_f22.to_excel(writer, sheet_name="2. Formulario 22", index=False)
 
-                # Hoja 3: Tramo IGC
-                df_t = pd.DataFrame([{
-                    "Desde ($)":          "0" if t["desde"] == 0 else t["desde"],
-                    "Hasta ($)":          "y más" if t["hasta"] == float("inf") else t["hasta"],
-                    "Factor":             "Exento" if t["factor"] == 0 else t["factor"],
-                    "Cantidad a Rebajar": t["rebaja"],
-                    "Tramo":              t["label"],
-                } for t in TRAMOS_IGC])
-                df_t.to_excel(writer, sheet_name="3. Tramo Impositivo", index=False)
+        # Hoja 3: Tramos IGC
+        df_t = pd.DataFrame([{
+            "Desde": "0" if t["desde"] == 0 else fmt_clp(t["desde"]),
+            "Hasta": "y más" if t["hasta"] == float("inf") else fmt_clp(t["hasta"]),
+            "Factor": "Exento" if t["factor"] == 0 else f"{t['factor']*100}%",
+            "Rebaja": fmt_clp(t["rebaja"]),
+            "Tramo": t["label"],
+        } for t in TRAMOS_IGC])
+        df_t.to_excel(writer, sheet_name="3. Tramos IGC", index=False)
 
-                # Hoja 4: Simulación APV
-                base_val = st.session_state["cod170"]
-                apv_val  = st.session_state["apv_anual"]
-                igc_s    = calc_igc(base_val)
-                igc_c    = calc_igc(max(0.0, base_val - apv_val))
-                aho_val  = igc_s - igc_c
-                res_s    = st.session_state["cod305"]
-                res_c    = res_s - aho_val
-                df_apv = pd.DataFrame([
-                    {"Concepto": "Base Imponible sin APV (Cód. 170)", "Valor": base_val},
-                    {"Concepto": "APV Anual simulado",                "Valor": apv_val},
-                    {"Concepto": "Base Imponible con APV",            "Valor": max(0.0, base_val - apv_val)},
-                    {"Concepto": "IGC sin APV",                       "Valor": igc_s},
-                    {"Concepto": "IGC con APV",                       "Valor": igc_c},
-                    {"Concepto": "Ahorro Tributario Anual",           "Valor": aho_val},
-                    {"Concepto": "Resultado F22 sin APV (Cód. 305)",  "Valor": res_s},
-                    {"Concepto": "Resultado F22 con APV (proyectado)","Valor": res_c},
-                    {"Concepto": "Rentabilidad Implícita APV",        "Valor": f"{aho_val/apv_val*100:.1f}%" if apv_val > 0 else "—"},
-                ])
-                df_apv.to_excel(writer, sheet_name="4. Simulacion APV", index=False)
+        # Hoja 4: Simulación APV
+        base_val = st.session_state["cod170"]
+        apv_val = st.session_state["apv_anual"]
+        igc_sin = calc_igc(base_val)
+        igc_con = calc_igc(max(0.0, base_val - apv_val))
+        ahorro = igc_sin - igc_con
+        df_apv = pd.DataFrame({
+            "Concepto": [
+                "Base Imponible sin APV",
+                "APV Anual", 
+                "Base con APV",
+                "IGC sin APV",
+                "IGC con APV",
+                "Ahorro Tributario"
+            ],
+            "Valor": [base_val, apv_val, max(0.0, base_val-apv_val), igc_sin, igc_con, ahorro]
+        })
+        df_apv.to_excel(writer, sheet_name="4. Simulacion APV", index=False)
 
-                                # Hoja 5: Proyección
-                df_raw = pd.DataFrame([{
-                    "Año": r["Año"],
-                    "UF del año": uf_base * math.pow(1.03, r["Año"]),
-                    "Fondo Acumulado CLP": float(r["Fondo Acumulado (CLP)"].replace(".", "").replace("$", "").replace(",", ".")),
-                    "Fondo Acumulado UF": float(r["Fondo Acumulado (UF)"].replace("UF ", "").replace(",", ".")),
-                    "Rentabilidad CLP": float(r["Rentabilidad (CLP)"].replace(".", "").replace("$", "").replace(",", ".")),
-                    "Rentabilidad UF": float(r["Rentabilidad (UF)"].replace("UF ", "").replace(",", ".")),
-                    "ROI acumulado": float(r["ROI acumulado"].replace("%", "")) / 100,
-                } for r in rows_proj])
-                df_raw.to_excel(writer, sheet_name="5. Proyeccion Rentabilidad", index=False)
+        # Hoja 5: Resumen (sin proyección compleja)
+        df_resumen = pd.DataFrame({
+            "Parametro": ["Tasa Rentabilidad", "UF Base", "APV Anual", "Base IGC"],
+            "Valor": [st.session_state["tasa_pct"], st.session_state["uf_base"], 
+                     st.session_state["apv_anual"], st.session_state["cod170"]]
+        })
+        df_resumen.to_excel(writer, sheet_name="5. Resumen", index=False)
 
-            output.seek(0)
-            return output.read()
+    output.seek(0)
+    return output.read()
 
     # ─────────────────────────────────────────────
     # FUNCIÓN PDF PROFESIONAL
