@@ -533,7 +533,7 @@ ROI = Rentabilidad generada / Total aportado
 ```
 """)
 
-        def generar_pdf():
+def generar_pdf():
     """Genera PDF profesional con toda la simulación"""
     buffer = io.BytesIO()
     
